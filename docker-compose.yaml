@@ -1,0 +1,12 @@
+version: "3.9"
+services:
+  main:
+    image: schcoscore
+    working_dir: "${_DOCKER_APP_WORK_DIR:-/app}"
+    environment:
+      - DOCKER_APP_WORK_DIR=${_DOCKER_APP_WORK_DIR:-/app}
+    volumes:
+      - ".:${_DOCKER_APP_WORK_DIR:-/app}"
+    command:
+      - python
+      - ./schcoscore.py
