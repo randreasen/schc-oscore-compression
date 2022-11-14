@@ -1,4 +1,4 @@
-# This file is part of the Python aiocoap library project.
+
 #
 # Copyright (c) 2012-2014 Maciej Wasilak <http://sixpinetrees.blogspot.com/>,
 #               2013-2014 Christian Amsüss <c.amsuess@energyharvesting.at>
@@ -14,9 +14,12 @@ import hashlib
 import json
 import binascii
 import os, os.path
+from typing import Tuple
 import warnings
 import tempfile
 import abc
+import struct
+import copy
 
 from aiocoap.message import Message
 from aiocoap.util import secrets
@@ -28,8 +31,127 @@ import cryptography.exceptions
 import hkdf
 import cbor
 
+from schc.RuleMngt import RuleManager
+from schc.Parser_fused import Parser
+from schc.Compressor import Compressor
+from schc.Decompressor import Decompressor
+
 USE_COMPRESSION = True
 MAX_SEQNO = 2**40 - 1
+SCHC_INNER_RULE_FILENAME =  "myrule.inner"
+
+def make_inner_schc_rule_manager(inner_rule_filename: str = SCHC_INNER_RULE_FILENAME):
+    schcRule = json.loads(json.load(open(os.path.join(".", "schc", inner_rule_filename))))
+    schcRM = RuleManager()
+    for elem in schcRule:
+        schcRM.addRule(elem)
+    return schcRM
+
+def piv2payload(message) -> Tuple[Message, bool]:
+    """ By default, aiocoap puts the piv into the Object Security option.
+        For now, we fix this by getting it out of the opt into the payload
+        as per the rfc each time we encrypt. """
+
+    msg = copy.deepcopy(message)
+
+    if(msg.opt.object_security == None):
+        raise ProtectionInvalid("No Object-Security option")
+    if msg.opt.object_security == b'':
+        return msg, False
+    os_opt = msg.opt.object_security
+    payload = msg.payload
+    firstbyte = os_opt[0] # This we do not touch
+    tail = os_opt[1:]
+    pivsz = firstbyte & 0b111
+    if pivsz:
+        if len(tail) < pivsz:
+            raise DecodeError("Partial IV announced but not given")
+        piv = tail[:pivsz]
+        tail = tail[pivsz:]
+
+    if firstbyte & 0b00010000:
+        # context hint
+        raise DecodeError("FIXME: Hints not currently supported")
+
+    if firstbyte & 0b00001000:
+        kid = tail
+        # print("$$$$$$$ KID PRINT $$$$$$$$$$$")
+        # print("The kid = {}".format(kid))
+
+    os_opt = firstbyte.to_bytes(1,byteorder='big') + kid
+    msg.opt.object_security = os_opt
+    msg.payload = piv + payload
+    return msg, True
+
+def piv2os(message):
+    """ Reverts the effects of piv2payload, so that aiocoap can keep
+        handling the Object Security option the way it's been doing 
+        so up to now."""
+
+    print("Calling piv2os")
+
+    msg = copy.deepcopy(message)
+
+    print("msg before piv2os = {}".format(msg.encode()))
+
+    if(msg.opt.object_security == None):
+        raise ProtectionInvalid("No Object-Security option")
+    os_opt = bytes(msg.opt.object_security)
+    if os_opt == b'':
+        msg.opt.object_security = os_opt
+        return
+    payload = msg.payload
+    firstbyte = os_opt[0] # This we do not touch
+    tail = os_opt[1:]
+    pivsz = firstbyte & 0b111
+    if pivsz:
+        if len(tail) < pivsz:
+            raise DecodeError("Partial IV announced but not given")
+        piv = payload[:pivsz]
+        payload = payload[pivsz:]
+        tail = piv + tail
+    # print("firstbyte is of type {}".format(type(firstbyte)))
+    os_opt = firstbyte.to_bytes(1,byteorder='big') + tail
+    msg.opt.object_security = os_opt
+    msg.payload = payload
+
+    print("msg after piv2os  = {}".format(msg.encode()))
+
+    return msg
+
+def apply_inner_compression(plaintext: bytes, direction: str):
+    schcParser = Parser()
+    schcRM = make_inner_schc_rule_manager()
+    schcComp = Compressor(schcRM)
+    
+    parsedFields, parsedData = schcParser.parser(plaintext, version="inner_oscore")
+    compressionRule = schcComp.RuleMngt.FindRuleFromHeader(parsedFields, direction)
+    
+    if (compressionRule != None):
+        compResult = struct.pack('!B', compressionRule["ruleid"]) # start with the ruleid
+        compRes = schcComp.apply(parsedFields, compressionRule["content"], direction)
+        if parsedData is not None:
+            compRes.add_bytes(parsedData)
+        compResult += compRes.buffer()
+    else:
+        compResult = plaintext
+
+    return compResult
+
+def apply_inner_decompression(plaintext: bytes, direction: str):
+    respRuleId = plaintext[0:1] # First byte is the ruleid
+    respResidue = plaintext[1:] # The rest is compression residue
+        
+    schcRM = make_inner_schc_rule_manager()
+    schcDec = Decompressor(schcRM)
+    decRule = schcDec.RuleMngt.FindRuleFromID( respRuleId[0] )
+    if ( decRule == None ):
+        print( "No Rule" )
+        return plaintext
+    else:
+        respPkt, respPktLength = schcDec.apply(respResidue, decRule, "%s" % direction)
+        decompressed = bytes(respPkt)
+        return decompressed
 
 class NotAProtectedMessage(ValueError):
     """Raised when verification is attempted on a non-OSCORE message"""
@@ -114,7 +236,7 @@ class SecurityContext:
         version = 1
         class_i_options = b""
 
-        external_aad = [
+        external_aad = [    
                 version,
                 self.algorithm.value,
                 request_kid,
@@ -223,7 +345,7 @@ class SecurityContext:
         else:
             return b""
 
-    def protect(self, message, request_data=None, *, can_reuse_partiv=True):
+    def protect(self, message, request_data=None, *, can_reuse_partiv=True, compress_inner=False, direction="up", dump_inner=False):
         assert (request_data is None) == message.code.is_request()
         if request_data is not None:
             request_kid, request_partiv, request_nonce = request_data
@@ -256,12 +378,17 @@ class SecurityContext:
         key = self.sender_key
 
         plaintext = bytes([inner_message.code]) + inner_message.opt.encode()
+
         if inner_message.payload:
             plaintext += bytes([0xFF])
             plaintext += inner_message.payload
 
+        compResult = apply_inner_compression(plaintext, direction)
 
-        ciphertext, tag = self.algorithm.encrypt(plaintext, aad, key, nonce)
+        if compress_inner:
+            ciphertext, tag = self.algorithm.encrypt(compResult, aad, key, nonce) # Use this for SCHC compression
+        else:
+            ciphertext, tag = self.algorithm.encrypt(plaintext, aad, key, nonce) # Use this for no compression
 
         option_data = self._compress(unprotected, protected)
 
@@ -273,9 +400,12 @@ class SecurityContext:
         # the request_data in the second argument should be discarded by the
         # caller when protecting a response -- is that reason enough for an
         # `if` and returning None?
-        return outer_message, (request_kid, request_partiv, request_nonce)
+        if dump_inner:
+            return outer_message, (request_kid, request_partiv, request_nonce), (plaintext, compResult)
+        else:
+            return outer_message, (request_kid, request_partiv, request_nonce)
 
-    def unprotect(self, protected_message, request_data=None):
+    def unprotect(self, protected_message, request_data=None, decompress_inner=False, direction="up"):
         assert (request_data is not None) == protected_message.code.is_response()
         if request_data is not None:
             request_kid, request_partiv, request_nonce = request_data
@@ -327,6 +457,9 @@ class SecurityContext:
 
         plaintext = self.algorithm.decrypt(ciphertext, tag, aad, self.recipient_key, nonce)
 
+        if decompress_inner:
+            plaintext = apply_inner_decompression(plaintext, direction)
+
         if seqno is not None:
             self.recipient_replay_window.strike_out(seqno)
 
@@ -334,6 +467,7 @@ class SecurityContext:
 
         unprotected_message = Message(code=plaintext[0])
         unprotected_message.payload = unprotected_message.opt.decode(plaintext[1:])
+        unprotected_message.payload = bytes(unprotected_message.payload)
 
         if unprotected_message.code.is_request():
             unprotected_message.opt.observe = protected_message.opt.observe
