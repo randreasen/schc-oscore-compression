@@ -54,7 +54,7 @@ class Parser:
         for e, v in self.header_fields:
             print ("{0:20} {1:3} ".format(e, v), self.header_fields[e, v])
 
-    def parser(self, packet, direction="up"):
+    def parser(self, packet):
 #        self.sepacketHexaContent = packet
         field_position = {}
         # The complete trame content in printed
@@ -62,8 +62,6 @@ class Parser:
 
         print ('argument type', type(packet))
 
-        self.header_fields = {}
-        
         # The "IP_version" field is pulled apart
         firstByte = unpack('!BBHHBBQQQQHHHHBBH', packet[:52])
         print(firstByte)
@@ -73,32 +71,12 @@ class Parser:
         self.header_fields["IPv6.payloadLength", 1]= [firstByte[3], 16, 'fixed']
         self.header_fields["IPv6.nextHeader", 1]   = [firstByte[4], 8, 'fixed']
         self.header_fields["IPv6.hopLimit", 1]     = [firstByte[5], 8, 'fixed']
-
-        if direction == "up":
-            self.header_fields["IPv6.prefixES", 1]     = [firstByte[6], 64, 'fixed']
-            self.header_fields["IPv6.iidES", 1]        = [firstByte[7], 64, 'fixed']
-            self.header_fields["IPv6.prefixLA", 1]     = [firstByte[8], 64, 'fixed']
-            self.header_fields["IPv6.iidLA", 1]        = [firstByte[9], 64, 'fixed']
-        elif direction == "dw":
-            self.header_fields["IPv6.prefixLA", 1]     = [firstByte[6], 64, 'fixed']
-            self.header_fields["IPv6.iidLA", 1]        = [firstByte[7], 64, 'fixed']
-            self.header_fields["IPv6.prefixES", 1]     = [firstByte[8], 64, 'fixed']
-            self.header_fields["IPv6.iidES", 1]        = [firstByte[9], 64, 'fixed']
-        else:
-            raise ValueError ("unknwon direction")
-
-        if firstByte[4] != 17:
-            raise ValueError("IPv6 Proto unknown")
-
-        if direction == "up":
-            self.header_fields["UDP.PortES", 1]      = [firstByte[10], 16, 'fixed']
-            self.header_fields["UDP.PortLA", 1]      = [firstByte[11], 16, 'fixed']
-        elif direction == "dw":
-            self.header_fields["UDP.PortLA", 1]      = [firstByte[10], 16, 'fixed']
-            self.header_fields["UDP.PortES", 1]      = [firstByte[11], 16, 'fixed']
-        else:
-                raise ValueError("Unknown direction")
-        
+        self.header_fields["IPv6.prefixES", 1]     = [firstByte[6], 64, 'fixed']
+        self.header_fields["IPv6.iidES", 1]        = [firstByte[7], 64, 'fixed']
+        self.header_fields["IPv6.prefixLA", 1]     = [firstByte[8], 64, 'fixed']
+        self.header_fields["IPv6.iidLA", 1]        = [firstByte[9], 64, 'fixed']
+        self.header_fields["UDP.PortES", 1]      = [firstByte[10], 16, 'fixed']
+        self.header_fields["UDP.PortLA", 1]      = [firstByte[11], 16, 'fixed']
         self.header_fields["UDP.length", 1]      = [firstByte[12], 16, 'fixed']
         self.header_fields["UDP.checksum", 1]    = [firstByte[13], 16, 'fixed']
         self.header_fields["CoAP.version", 1]    = [firstByte[14] >> 6, 2, 'fixed']
@@ -117,7 +95,6 @@ class Parser:
 
         option_number = 0
         while (pos < len(packet)):
-            print (">>>>", self.header_fields)
             if (int(packet[pos]) == 0xFF): break
 
             deltaTL = int(packet[pos])
@@ -140,11 +117,8 @@ class Parser:
                 option_value += chr(packet[pos])
                 pos += 1
                 # /!\ check if max length is reached
-                
-            try:
-                self.header_fields[option_names[option_number], field_position[option_number]] = [option_value, L*8,  "variable"]
-            except:
-                raise ValueError("CoAP Option {} not found".format(option_number))
+
+            self.header_fields[option_names[option_number], field_position[option_number]] = [option_value, L*8,  "variable"]
 
 # now the data
 
@@ -163,3 +137,10 @@ class Parser:
                 raise ValueError("error in CoAP option parsing")
 
         return self.header_fields, None
+
+# #ipv6 = bytearray(b'`\x12\x34\x56\x00\x1e\x11\x1e\xfe\x80\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\xfe\x80\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x162\x163\x00\x1e\x00\x00A\x02\x00\x01\n\xb3foo\xff\x84\x01\x82  &Ehello')
+# ipv6 =  bytearray(b'`\x12\x34\x56\x00\x1e\x11\x1e\xfe\x80\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\xfe\x80\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x162\x163\x00\x1e\x00\x00A\x02\x00\x01\n\xb3foo\x03bar\x06ABCD==Fk=eth0\xff\x84\x01\x82  &Ehello')
+#
+# p = Parser()
+# f = p.parser(ipv6)
+# p.dump()

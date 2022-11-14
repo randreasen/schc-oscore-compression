@@ -1,5 +1,9 @@
+from schc.Parser import Parser
 import re
 import struct
+
+import log
+logger = log.getLogger("logger")
 
 def MO_ignore( TV, FV, length, arg = None ):
     """Matching Operator ignore, return true for any Target Value"""
@@ -25,7 +29,7 @@ def MO_matchmapping( TV, FV, length, arg = None ):
         for mappingID, mappingValue in TV.items():
             if mappingValue == FV:
                 return True
-        return False
+            return False
     elif type(TV) is list:
         for mappingValue in TV:
             # print ('\t', type (mappingValue), '  <=> ', type (FV), end='|')
@@ -46,8 +50,7 @@ def MO_MSB( TV, FV, length, arg = None ):
 
     return true if the left arg bits are the same in TV and FV """
 
-    print( "\tMSB ", type( TV ), ' ', type( FV ), "FV length =", length, ' arg =', arg )
-# dont work on quite long, may be we shouls add this for prefixES
+    # print( "\tMSB ", type( TV ), ' ', type( FV ), "FV length =", length, ' arg =', arg )
 
     if (type(TV) != type(FV)):
         return False
@@ -120,8 +123,6 @@ class RuleManager:
             if (entry[2] == "bi") or (entry[2] == "dw"): down += 1
             if (entry[2] == "bi") or (entry[2] == "up"): up += 1
 
-        #print(self.context)
-        #        print ('up =', up, ' down = ', down)
         rule["upRules"] = up
         rule["downRules"] = down
 
@@ -139,29 +140,44 @@ class RuleManager:
         """Find a Rule from a header description given by a parser.
         direction should be "up" or "down"  """
         for rule in self.context:
-            #print('applying rule ', rule)
+            logger.debug("Finding rule from headers (dir = {})".format(direction))
+            logger.debug('applying rule:')
+            for line in log.pprint_s(rule).splitlines():
+                logger.debug(line)
 
-            print("looking for size ", len(headers)," ", rule["upRules"], ' ', rule["downRules"])
+            # logger.debug(f"looking for size {len(headers)}, {rule['upRules']}, {rule['downRules']}")
+            logger.debug("looking for size {}, {}, {}".format(len(headers), rule['upRules'], rule['downRules']))
             #not the good number of rules, try the next
             if (direction == "up" and len(headers) != rule["upRules"]): continue
             if (direction == "dw" and len(headers) != rule["downRules"]): continue
 
+            def make_hashable_entry(entry):
+                return tuple(tuple(e) if isinstance(e, list) else e for e in entry)
+
             # Looking MO
             foundEntries = 0
+            found_entry_keys = set()
+            tried_entries = set()
             for entry in rule["content"]:
+                logger.debug("number of found entries = {}/{}".format(foundEntries, len(headers)))
+
                 FID = entry[0]
                 POS = entry[1]
 
                 DI = entry [2]
+                if direction == "down":
+                    direction = "dw"
                 if (DI == "bi") or (DI==direction):
+
+                    tried_entries.add(make_hashable_entry(entry))
 
                     try:
                         FV = headers[FID, POS][0]
                     except:
-                        print('Field not found in rule')
+                        logger.debug('Field not found in rule:')
+                        logger.debug("{}".format(entry))
                         break
 
-                    foundEntries += 1
                     TV = entry[3]
                     MO = entry[4]
                     fieldLength = headers[FID, POS][1]
@@ -175,19 +191,40 @@ class RuleManager:
                         MO = MO.split('(')[0] # remove the argument and parentheses
                         MO = MO.replace (' ', '') # suppress blank if any
 
-# MO must be cleaned of argument MSB(4) => MSB and arg = 4
-                    print (' {1:3d} {2:15s} Call {0:10s} TV = '.format(MO, foundEntries, FID), TV, ' FV = ', FV)
+                    # MO must be cleaned of argument MSB(4) => MSB and arg = 4
+                    # print (' {1:3d} {2:15s} Call {0:10s} TV = '.format(MO, foundEntries, FID), TV, ' FV = ', FV)
                     if (not self.MatchingOperators[MO](TV, FV, fieldLength, arg)):
+                        logger.debug("Did not satisfy matching operator:")
+                        logger.debug("entry = {}".format(entry))
+                        logger.debug("MO = {}".format(MO))
+                        logger.debug("TV = {}".format(TV))
+                        logger.debug("FV = {}".format(FV))
+                        logger.debug("arg = {}".format(arg))
                         break
 
-            print("Found ", foundEntries, " among ", len(headers), ' ', rule["upRules"], ' ', rule["downRules"])
-            if (direction == "up" and foundEntries == rule["upRules"]):
-                  return rule
-            if (direction == "dw" and foundEntries == rule["downRules"]):
-                  return rule
+                    foundEntries += 1
 
-        print ("No rule matches header")
-        return (None)
+                    logger.debug("Found entry = {}".format(entry))
+                    hashable_entry = make_hashable_entry(entry)
+                    found_entry_keys.add(tuple(hashable_entry))
+
+            logger.debug("The following entries were missing to fully match rule:")
+            missing_entries = tried_entries.difference(found_entry_keys)
+            for line in log.pprint_s(missing_entries).splitlines():
+                logger.debug(line)
+
+            # print("Found ", foundEntries, " among ", len(headers), ' ', rule["upRules"], ' ', rule["downRules"])
+
+            if (direction == "up" and foundEntries == rule["upRules"]):
+                return rule
+            if (direction == "dw" and foundEntries == rule["downRules"]):
+                return rule
+
+
+        raise ValueError("No rule matches headers: {}".format(headers))
+
+        # print ("No rule matches header")
+        # return (None)
 
 #
 # #                           fID                  Pos  DI  TV                  MO           CDA
@@ -248,3 +285,20 @@ class RuleManager:
 #                           ["CoAP.Uri-Query",    1,  "up", "k=",               "MSB(16)", "LSB"],
 #                           ["CoAP.Option-End",   1,  "up", 0xFF,               "equal", "not-sent"]
 #                        ]}
+#
+#
+# ipv6 =  bytearray(b'`\x00\x00\x00\x00-\x11\x1e\xfe\x80\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\xfe\x80\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x162\x163\x00-\x00\x00A\x02\x00\x01\x82\xb3foo\x03bar\x06ABCD==Fk=eth0\xff\x82\x19\x0bd\x1a\x00\x01\x8e\x96')
+#
+# p = Parser()
+# f, data = p.parser(ipv6)
+#
+# RM = RuleManager()
+# RM.addRule(rule_coap0)
+# RM.addRule(rule_coap1)
+#
+# print("=====")
+# print("F", f)
+# print (len(f))
+#
+# print ("rule = ", RM.FindRuleFromHeader(f, "up"))
+# print ("rule = ", RM.FindRuleFromID(1))

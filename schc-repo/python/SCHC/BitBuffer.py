@@ -34,6 +34,8 @@ class BitBuffer(object):
             return 0x00
 
     def add_byte(self, byte):
+        if type(byte) is str: byte = ord(byte)
+
         for i in range(7, -1, -1):
             self.add_bit(byte & (1 << i))
 

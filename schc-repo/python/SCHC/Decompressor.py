@@ -12,14 +12,19 @@ SCHC compressor, Copyright (c) <2017><IMT Atlantique and Philippe Clavier>
     along with this program.  If not, see <http://www.gnu.org/licenses/>
 '''
 
+from schc.Parser import Parser
 import struct
 import re
-from SCHC import BitBuffer
+from schc.RuleMngt import RuleManager
+import schc.BitBuffer as BitBuffer
+from aiocoap import Message as aiocoapMessage
+from aiocoap.numbers import OptionNumber
 
 class Decompressor:
 
     def __init__( self, RM ):
         self.RuleMngt = RM
+        self.optionsMsg = aiocoapMessage() # Dummy Message object to contain the options
 
         self.DecompressionActions = {
             "not-sent" : self.DA_notSent,
@@ -52,59 +57,53 @@ class Decompressor:
             "CoAP.code": [8, "direct"],
             "CoAP.messageID": [16, "direct"],
             "CoAP.token": [8, "direct"],  # MUST be set to TKL value
-            "CoAP.Location-Path" :["variable", {"CoAPOption": 8}],
             "CoAP.Uri-Path" :  ["variable", {"CoAPOption": 11}],
+            "CoAP.Uri-Host" :  ["variable", {"CoAPOption":  3}],
             "CoAP.Content-Format" : ["variable", {"CoAPOption": 12}],
             "CoAP.Uri-Query" : ["variable", {"CoAPOption": 15}],
+            "CoAP.Object-Security" : ["variable", {"CoAPOption" : 21}],
             "CoAP.Option-End" : [8, "direct"]
         }
 
-    def compute_CoAPOption (self, buf,  optType, length, value ):
+    def getCoAPOption(self, optno):
+        # Find the corresponding option from the option number
+        for att in dir(OptionNumber):
+            if type(getattr(OptionNumber, att)) == type(OptionNumber.OBJECT_SECURITY):
+                if getattr(OptionNumber, att).numerator == optno:
+                    return getattr(OptionNumber, att)
+        print("No CoAP Option match found")
+        return None
+
+    def addCoAPOpt(self, opt, val):
+        if opt:
+            self.optionsMsg.opt.add_option(opt.create_option(value=val)) 
+        else:
+            print("No option passed")
+
+    def compute_CoAPOption ( type, length, value ):
         print( "Not implemented" )
-        print ("current type = ", self.opt_num, "type =", optType, "length = ", length, "value =", value)
-
-        deltaT = optType - self.opt_num
-        self.opt_num = optType
-
-        lengthByte = length // 8
-        print ("lengthByte = ", lengthByte)
-
-        if (deltaT > 14) or (lengthByte > 14):
-            print ("Not implemented Type or Length too big")
-            return
-
-        firstByte = (deltaT << 4) | lengthByte
-        print ("first Byte =", hex(firstByte))
-        buf.add_byte (firstByte)
-        
-        buf.add_bytes(bytes(value, encoding='utf-8'))
-        
         return
 
-    def DA_notSent( self, buf, headers, TV, length, nature, arg, algo ):
-        print ( "DA_notSent", TV, length, nature, arg, "algoo=", algo )
+    def DA_notSent( self, buf, headers, TV, length, nature, arg, algo, pos ):
+        # print ( "DA_notSent", TV, length, nature, arg, algo )
 
-        if ( nature == "variable" ):
-            print ("TV=", TV, len(TV))
+        if ( nature == "variable" ): #TODO Deal with options
             length = len( TV ) * 8
+            # print("TV here in this case is = {}".format(TV))
 
-        
+            if "CoAPOption" in algo:
+                optno = algo["CoAPOption"]
+                _TV = TV
+                if optno == 21:
+                    _TV = TV.encode()
+                self.addCoAPOpt(opt=self.getCoAPOption(optno), val=_TV)
+
         if ( type( TV ) is int ):
             for i in range ( length - 1, -1, -1 ):
                 buf.add_bit( TV & ( 1 << i ) )
-        elif type (TV) is str:
-            if algo == "direct":
-                print ("Direct not implemented")
-                
-            elif "CoAPOption" in algo:
-                print ("CoAP Option")
-                self.compute_CoAPOption (buf, algo["CoAPOption"], length, TV)
-            else:
-                print ("algo", algo, "Not implemented")
-                
 
-    def DA_valueSent( self, buf, headers, TV, length, nature, arg, algo ):
-        print ( "DA_notSent", TV, length, nature, arg, algo )
+    def DA_valueSent( self, buf, headers, TV, length, nature, arg, algo, pos ):
+        # print ( "DA_notSent", TV, length, nature, arg, algo )
         if ( nature == "variable" ):
             leng = 0
             for i in range ( 0, 4 ):
@@ -114,15 +113,15 @@ class Decompressor:
             leng *= 8
 
             if ( algo == "direct" ):
-                self.DA_valueSent( buf, headers, null, leng, "fixed", null, algo )
+                self.DA_valueSent( buf, headers, null, leng, "fixed", null, algo, pos )
             else:
-                if "CoAPOption" in algo:
+                if "CoAPOption" in algo: # TODO: Could optimize this to use aiocoap options
                     delta = algo["CoAPOption"] - self.opt_num
                     if leng != 0:
                         # buff = bytearray ( b'' )
                         buff = []
                         for b in range( 0, leng ):  # This is not well done
-                            octet = b // 8
+                            octet = b // 8 # Floor division -> how many bytes?
                             offset = b % 8
                             if len( buff ) == octet: 
                                 buff.append( 0x00 )
@@ -149,8 +148,8 @@ class Decompressor:
                 for i in range( length ):
                     buf.add_bit( headers.next_bit() )
 
-    def DA_mappingSent( self, buf, headers, TV, length, nature, arg, algo ):
-        print ( "DA_mappingSent", TV, length, nature, arg, algo )
+    def DA_mappingSent( self, buf, headers, TV, length, nature, arg, algo, pos ):
+        # print ( "DA_mappingSent", TV, length, nature, arg, algo )
 
         elmNb = len( TV )
         bitNb = 0
@@ -162,11 +161,11 @@ class Decompressor:
             index <<= 1
             index |= v
 
-        self.DA_notSent( buf, headers, TV[index], length, "fixed", None, algo )
+        self.DA_notSent( buf, headers, TV[index], length, "fixed", None, algo, pos )
 
 
-    def DA_LSB( self, buf, headers, TV, length, nature, arg, algo ):
-        print ( "DA_LSB", TV, length, nature, arg, algo )
+    def DA_LSB( self, buf, headers, TV, length, nature, arg, algo, pos ):
+        # print ( "DA_LSB", TV, length, nature, arg, algo )
         if ( nature == "variable" ):
             leng = 0
             for i in range ( 0, 4 ):
@@ -174,7 +173,7 @@ class Decompressor:
                 leng |= headers.next_bit()
 
             leng *= 8
-            self.DA_LSB( buf, headers, TV, leng, "fixed", None, algo )
+            self.DA_LSB( buf, headers, TV, leng, "fixed", None, algo, pos )
         elif nature == "fixed":
             if type( TV ) is int:
                 merged = TV
@@ -184,9 +183,9 @@ class Decompressor:
 
                     merged |= binval << i
 
-                    print ( "merged TV ", TV, " and binval ", binval, " = "   , merged )
+                    # print ( "merged TV ", TV, " and binval ", binval, " = "   , merged )
 
-                self.DA_notSent( buf, headers, merged, length, "fixed", None, algo )
+                self.DA_notSent( buf, headers, merged, length, "fixed", None, algo, pos )
             elif type( TV ) == str:
                 if ( length % 8 != 0 ):
                     print ( "error" )
@@ -197,17 +196,17 @@ class Decompressor:
                         for k in range ( 7, -1, -1 ):
                             value |= headers.next_bit() << k
                         TV.append( value )
-                    self.DA_notSent( buf, headers, TV, len( TV ) * 8, "fixed", None, algo )
+                    self.DA_notSent( buf, headers, TV, len( TV ) * 8, "fixed", None, algo, pos )
             else:
                 print ( "not implemented" )
 
-    def DA_computeLength( self, buf, headers, TV, length, nature, arg, algo ):
-        print ( "DA_computeLength", TV, length, nature, arg, algo )
-        self.DA_notSent( buf, headers, 0xFFFF, 16, "fixed", None, algo )
+    def DA_computeLength( self, buf, headers, TV, length, nature, arg, algo, pos ):
+        # print ( "DA_computeLength", TV, length, nature, arg, algo )
+        self.DA_notSent( buf, headers, 0xFFFF, 16, "fixed", None, algo, pos )
 
-    def DA_computeChecksum( self, buf, headers, TV, length, nature, arg, algo ):
-        print ( "DA_computeChecksum", TV, length, nature, arg, algo )
-        self.DA_notSent( buf, headers, 0xCCCC, 16, "fixed", None, algo )
+    def DA_computeChecksum( self, buf, headers, TV, length, nature, arg, algo, pos ):
+        # print ( "DA_computeChecksum", TV, length, nature, arg, algo )
+        self.DA_notSent( buf, headers, 0xCCCC, 16, "fixed", None, algo, pos )
 
     def apply ( self, header, rule, direction ):
         buf = BitBuffer.BitBuffer()
@@ -253,11 +252,23 @@ class Decompressor:
 
                 algo = self.field_size[FID][1]
 
-                print ("DECOMPRESSION: ", "FID = ", FID, " DA = ", DA, " TV= ", TV, " size= ", size, " nature = ", nature, " arg = ", arg)
+                # print ("DECOMPRESSION: ", "FID = ", FID, " ", DA, " TV= ", TV, " size= ", size, " nature = ", nature, " arg = ", arg)
 
-                self.DecompressionActions[DA]( buf, headersBuf, TV, size, nature, arg, algo )
+                self.DecompressionActions[DA]( buf, headersBuf, TV, size, nature, arg, algo, POS )
 
         
+        # print("Dummy msg options= {}".format(self.optionsMsg.opt))
+
+        # Add options before the payload marker:
+        exists_payload_marker = False
+        if buf.buffer()[-1:] == bytearray(b'\xff'):
+            buf._buf = buf._buf[:-1]
+            buf._bit_index -= 8
+            exists_payload_marker = True
+        optionsField = self.optionsMsg.opt.encode()
+        buf.add_bytes(optionsField)
+        if exists_payload_marker:
+            buf.add_bytes(b'\xff')
 
         length = len( headersBuf.buffer() ) * 8 - headersBuf.size()
         if length != 0:
