@@ -23,12 +23,15 @@ import logging
 
 import ipdb
 import aiocoap.numbers as numbers
-# import binascii
 
-import log
+import os
+LOGLEVEL = os.getenv("LOGLEVEL") or "INFO"
+LOG_FORMAT="%(asctime)s [%(filename)s:%(lineno)d]-%(levelname)s-: %(message)s"
 
-logger = log.getLogger("logger")
-logger.setLevel(logging.DEBUG)
+logging.basicConfig(format=LOG_FORMAT)
+logger = logging.getLogger("logger")
+logger.setLevel(getattr(logging, LOGLEVEL.upper()))
+
 
 option_names = {
     1: "CoAP.If-Match",
@@ -71,12 +74,9 @@ class Parser:
         # The complete trame content in printed
         # print("\n\t\tTrame content (hexa): %s" % hexlify(packet))
 
-        # print ('argument type', type(packet))
-
         if version == "outer":
             # The "IP_version" field is pulled apart
             firstByte = unpack('!BBHHBBQQQQHHHHBBH', packet[:52])
-            # print(firstByte)
             self.header_fields["IPv6.version", 1]      = [firstByte[0] >> 4, 4, 'fixed']
             self.header_fields["IPv6.trafficClass", 1] = [(firstByte[0] & 0x0F) << 4 | (firstByte[1] & 0xF0) >> 4, 8, 'fixed']
             self.header_fields["IPv6.flowLabel", 1]    = [(firstByte[1] & 0x0F ) << 16 | firstByte[2], 20, 'fixed']
@@ -99,7 +99,6 @@ class Parser:
             pos = 52 # next byte in packet
         elif version == "inner_oscore":
             firstByte = unpack('!B', packet[:1])
-            # print(firstByte)
             self.header_fields["CoAP.code", 1]       = [firstByte[0], 8, 'fixed']
             pos = 1 # next byte in packet
         else:
@@ -115,14 +114,10 @@ class Parser:
 
         option_number = 0
 
-        # import ipdb
-        # ipdb.set_trace()
         logger.debug("initial pos = {}".format(pos))
 
         while (pos < len(packet)):
             if (int(packet[pos]) == 0xFF): break
-
-            # ipdb.set_trace()
 
             deltaTL = int(packet[pos])
             pos += 1
@@ -150,16 +145,12 @@ class Parser:
             logger.debug("-"*2*(pos - 1) + "^^" + "#"*2*L)
             logger.debug("{:02x}".format(packet[pos]))
 
-            # ipdb.set_trace()
-
             try:
                 field_position[option_number] += 1
             except:
                 field_position[option_number] = 1
 
             option_value = ''
-
-            # ipdb.set_trace()
 
             for i in range (0, L):
                 if pos < len(packet):
@@ -173,31 +164,18 @@ class Parser:
                 logger.debug("{}".format(numbers.OptionNumber(option_number).create_option(value=option_value)))
             except Exception as e:
                 logger.debug("ERROR: Unrecognized option number = {}: {}".format(option_number, option_value))
-            # ipdb.set_trace()
 
             self.header_fields[option_names[option_number], field_position[option_number]] = [option_value, L*8,  "variable"]
 
-# now the data
+        # now the data
 
         if(pos < len(packet)):
             if (int(packet[pos]) == 0xFF):
                 self.header_fields["CoAP.Option-End", 1] = [0xFF, 8, 'fixed']
                 pos += 1
 
-                # while (pos < len(packet)):
-                #     print (hex(packet[pos]), end='')
-                #     pos += 1
-                # print()
-
                 return self.header_fields, packet[pos:]
             else:
                 raise ValueError("error in CoAP option parsing")
 
         return self.header_fields, None
-
-# #ipv6 = bytearray(b'`\x12\x34\x56\x00\x1e\x11\x1e\xfe\x80\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\xfe\x80\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x162\x163\x00\x1e\x00\x00A\x02\x00\x01\n\xb3foo\xff\x84\x01\x82  &Ehello')
-# ipv6 =  bytearray(b'`\x12\x34\x56\x00\x1e\x11\x1e\xfe\x80\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\xfe\x80\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x162\x163\x00\x1e\x00\x00A\x02\x00\x01\n\xb3foo\x03bar\x06ABCD==Fk=eth0\xff\x84\x01\x82  &Ehello')
-#
-# p = Parser()
-# f = p.parser(ipv6)
-# p.dump()

@@ -87,7 +87,7 @@ class Decompressor:
     def DA_notSent( self, buf, headers, TV, length, nature, arg, algo, pos ):
         # print ( "DA_notSent", TV, length, nature, arg, algo )
 
-        if ( nature == "variable" ): #TODO Deal with options
+        if ( nature == "variable" ):
             length = len( TV ) * 8
             # print("TV here in this case is = {}".format(TV))
 
@@ -115,13 +115,13 @@ class Decompressor:
             if ( algo == "direct" ):
                 self.DA_valueSent( buf, headers, null, leng, "fixed", null, algo, pos )
             else:
-                if "CoAPOption" in algo: # TODO: Could optimize this to use aiocoap options
+                if "CoAPOption" in algo:
                     delta = algo["CoAPOption"] - self.opt_num
                     if leng != 0:
                         # buff = bytearray ( b'' )
                         buff = []
                         for b in range( 0, leng ):  # This is not well done
-                            octet = b // 8 # Floor division -> how many bytes?
+                            octet = b // 8
                             offset = b % 8
                             if len( buff ) == octet: 
                                 buff.append( 0x00 )
@@ -257,8 +257,6 @@ class Decompressor:
                 self.DecompressionActions[DA]( buf, headersBuf, TV, size, nature, arg, algo, POS )
 
         
-        # print("Dummy msg options= {}".format(self.optionsMsg.opt))
-
         # Add options before the payload marker:
         exists_payload_marker = False
         if buf.buffer()[-1:] == bytearray(b'\xff'):
@@ -282,74 +280,3 @@ class Decompressor:
                 buf.add_bit( headersBuf.next_bit() )
 
         return buf.buffer(), buf.size()
-
-#                           fID                  Pos  DI  TV                  MO           CDA
-# rule_coap0 = {"ruleid"  : 0,
-#              "content" : [["IPv6.version",      1,  "bi", 6,                  "equal",  "not-sent"],
-#                           ["IPv6.trafficClass", 1,  "bi", 0x00,               "equal",  "not-sent"],
-#                           ["IPv6.flowLabel",    1,  "bi", 0x000000,           "equal",  "not-sent"],
-#                           ["IPv6.payloadLength",1,  "bi", None,               "ignore", "compute-length"],
-#                           ["IPv6.nextHeader",   1,  "bi", 17,                 "equal",  "not-sent"],
-#                           ["IPv6.hopLimit",     1,  "bi", 30,                 "ignore", "not-sent"],
-#                           ["IPv6.prefixES",     1,  "bi", 0xFE80000000000000, "equal", "not-sent"],
-#                           ["IPv6.iidES",        1,  "bi", 0x0000000000000001, "equal", "not-sent"],
-#                           ["IPv6.prefixLA",     1,  "bi", 0xFE80000000000000, "equal", "not-sent"],
-#                           ["IPv6.iidLA",        1,  "bi", 0x0000000000000002, "equal", "not-sent"],
-#                           ["UDP.PortES",        1,  "bi", 5682,               "equal", "not-sent"],
-#                           ["UDP.PortLA",        1,  "bi", 5683,               "equal", "not-sent"],
-#                           ["UDP.length",        1,  "bi", None,               "ignore", "compute-length"],
-#                           ["UDP.checksum",      1,  "bi", None,               "ignore", "compute-checksum"],
-#                           ["CoAP.version",      1,  "bi", 1,                  "equal", "not-sent"],
-#                           ["CoAP.type",         1,  "bi", 0,                  "equal", "not-sent"],
-#                           ["CoAP.tokenLength",  1,  "bi", 1,                  "equal", "not-sent"],
-#                           ["CoAP.code",         1,  "bi", 2,                  "equal", "not-sent"],
-#                           ["CoAP.messageID",    1,  "bi", 1,                  "MSB(4)", "LSB"],
-#                           ["CoAP.token",        1,  "bi", 0x01,               "MSB(4)", "LSB"],
-#                           ["CoAP.Uri-Path",     1,  "up", "foo",              "equal", "not-sent"],
-#                           ["CoAP.Uri-Path",     2,  "up", "bar",              "ignore", "value-sent"],
-#                        ]}
-#
-# rule_coap1 = {"ruleid"  : 1,
-#              "content" : [["IPv6.version",      1,  "bi", 6,                  "equal",  "not-sent"],
-#                           ["IPv6.trafficClass", 1,  "bi", 0x00,               "equal",  "not-sent"],
-#                           ["IPv6.flowLabel",    1,  "bi", 0x000000,            "equal",  "not-sent"],
-#                           ["IPv6.payloadLength",1,  "bi", None,               "ignore", "compute-length"],
-#                           ["IPv6.nextHeader",   1,  "bi", 17,                 "equal",  "not-sent"],
-#                           ["IPv6.hopLimit",     1,  "bi", 30,                 "ignore", "not-sent"],
-#                           ["IPv6.prefixES",     1,  "bi", 0xFE80000000000000, "equal", "not-sent"],
-#                           ["IPv6.iidES",        1,  "bi", 0x0000000000000001, "equal", "not-sent"],
-#                           ["IPv6.prefixLA",     1,  "bi", [0x2001066073010001,
-#                                                            0x2001123456789012,
-#                                                            0x2001123456789013,
-#                                                            0xFE80000000000000],"match-mapping", "mapping-sent"],
-#                           ["IPv6.iidLA",        1,  "bi", 0x0000000000000002, "equal", "not-sent"],
-#                           ["UDP.PortES",        1,  "bi", 5682,               "equal", "not-sent"],
-#                           ["UDP.PortLA",        1,  "bi", 5683,               "equal", "not-sent"],
-#                           ["UDP.length",        1,  "bi", None,               "ignore", "compute-length"],
-#                           ["UDP.checksum",      1,  "bi", None,               "ignore", "compute-checksum"],
-#                           ["CoAP.version",      1,  "bi", 1,                  "equal", "not-sent"],
-#                           ["CoAP.type",         1,  "up", 0,                  "equal", "not-sent"],
-#                           ["CoAP.type",         1,  "dw", 2,                  "equal", "not-sent"],
-#                           ["CoAP.tokenLength",  1,  "bi", 1,                  "equal", "not-sent"],
-#                           ["CoAP.code",         1,  "up", 2,                  "equal", "not-sent"],
-#                           ["CoAP.code",         1,  "dw", [69, 132],          "match-mapping", "mapping-sent"],
-#                           ["CoAP.messageID",    1,  "bi", 1,                  "MSB(12)", "LSB"],
-#                           ["CoAP.token",        1,  "bi", 0x80,               "MSB(4)", "LSB"],
-#                           ["CoAP.Uri-Path",     1,  "up", "foo",              "equal", "not-sent"],
-#                           ["CoAP.Uri-Path",     2,  "up", "bar",              "equal", "not-sent"],
-#                           ["CoAP.Uri-Path",     3,  "up", None,               "ignore", "value-sent"],
-#                           ["CoAP.Uri-Query",    1,  "up", "k=",               "MSB(16)", "LSB"],
-#                           ["CoAP.Option-End",   1,  "up", 0xFF,               "equal", "not-sent"]
-#                        ]}
-#
-# compressed = bytearray(b'\xde\x40') # 11 bits
-# RM = RuleManager()
-# RM.addRule(rule_coap0)
-# RM.addRule(rule_coap1)
-#
-# rule = RM.FindRuleFromID(1)
-#
-# dec = Decompressor(RM)
-#
-# header, length = dec.apply (compressed, rule, "dw")
-# print (header, ' ', length, ' ', length/8)

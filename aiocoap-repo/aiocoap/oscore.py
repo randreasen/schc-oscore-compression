@@ -70,13 +70,10 @@ def piv2payload(message) -> Tuple[Message, bool]:
         tail = tail[pivsz:]
 
     if firstbyte & 0b00010000:
-        # context hint
         raise DecodeError("FIXME: Hints not currently supported")
 
     if firstbyte & 0b00001000:
         kid = tail
-        # print("$$$$$$$ KID PRINT $$$$$$$$$$$")
-        # print("The kid = {}".format(kid))
 
     os_opt = firstbyte.to_bytes(1,byteorder='big') + kid
     msg.opt.object_security = os_opt
@@ -110,7 +107,6 @@ def piv2os(message):
         piv = payload[:pivsz]
         payload = payload[pivsz:]
         tail = piv + tail
-    # print("firstbyte is of type {}".format(type(firstbyte)))
     os_opt = firstbyte.to_bytes(1,byteorder='big') + tail
     msg.opt.object_security = os_opt
     msg.payload = payload
@@ -140,7 +136,7 @@ def apply_inner_compression(plaintext: bytes, direction: str):
 
 def apply_inner_decompression(plaintext: bytes, direction: str):
     respRuleId = plaintext[0:1] # First byte is the ruleid
-    respResidue = plaintext[1:] # The rest is compression residue
+    respResidue = plaintext[1:] # The rest is the compression residue
         
     schcRM = make_inner_schc_rule_manager()
     schcDec = Decompressor(schcRM)

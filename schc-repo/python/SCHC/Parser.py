@@ -55,7 +55,7 @@ class Parser:
             print ("{0:20} {1:3} ".format(e, v), self.header_fields[e, v])
 
     def parser(self, packet):
-#        self.sepacketHexaContent = packet
+        # self.sepacketHexaContent = packet
         field_position = {}
         # The complete trame content in printed
         print("\n\t\tTrame content (hexa): %s" % hexlify(packet))
@@ -120,27 +120,15 @@ class Parser:
 
             self.header_fields[option_names[option_number], field_position[option_number]] = [option_value, L*8,  "variable"]
 
-# now the data
+        # now the data
 
         if(pos < len(packet)):
             if (int(packet[pos]) == 0xFF):
                 self.header_fields["CoAP.Option-End", 1] = [0xFF, 8, 'fixed']
                 pos += 1
 
-                # while (pos < len(packet)):
-                #     print (hex(packet[pos]), end='')
-                #     pos += 1
-                # print()
-
                 return self.header_fields, packet[pos:]
             else:
                 raise ValueError("error in CoAP option parsing")
 
         return self.header_fields, None
-
-# #ipv6 = bytearray(b'`\x12\x34\x56\x00\x1e\x11\x1e\xfe\x80\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\xfe\x80\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x162\x163\x00\x1e\x00\x00A\x02\x00\x01\n\xb3foo\xff\x84\x01\x82  &Ehello')
-# ipv6 =  bytearray(b'`\x12\x34\x56\x00\x1e\x11\x1e\xfe\x80\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\xfe\x80\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x162\x163\x00\x1e\x00\x00A\x02\x00\x01\n\xb3foo\x03bar\x06ABCD==Fk=eth0\xff\x84\x01\x82  &Ehello')
-#
-# p = Parser()
-# f = p.parser(ipv6)
-# p.dump()

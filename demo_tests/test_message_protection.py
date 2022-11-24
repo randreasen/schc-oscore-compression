@@ -70,7 +70,7 @@ def test_message_protection(client_context, schc_inner_compressor):
 
 
     protected_msg.mtype = msg.mtype   # Some unprotected fields that are not
-    protected_msg.mid = msg.mid       # ("properly") handled by the encryption 
+    protected_msg.mid = msg.mid       # handled by the encryption 
     protected_msg.token = msg.token
 
     print("Protected message dump:")
@@ -78,9 +78,6 @@ def test_message_protection(client_context, schc_inner_compressor):
 
     print("Inner dump:")
     print(inner_dump)
-
-    # import pdb
-    # pdb.set_trace()
 
     print("Finished test")
 

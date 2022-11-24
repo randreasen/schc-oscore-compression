@@ -16,7 +16,7 @@ class MockOptions:
 
 @pytest.fixture
 def oscore_dir():
-    directory = "myoscore_dir"
+    directory = "oscore_dir"
     if os.path.exists(directory):
         shutil.rmtree(directory)
     os.mkdir(directory)
@@ -34,12 +34,11 @@ def test_pipeline_get_message(oscore_dir):
                          no_oscore=False,
                          no_outer_compression=False,
                          no_piv2payload=False,
-                         oscore_dir='myoscore_dir',
+                         oscore_dir='oscore_dir',
                          payload=None,
                          role=None,
                          silent=False,
                          token='0x82',
-                         # uri='coap://localhost/temperature',
                          uri='coap://127.0.0.1/temperature',
                          uri_path=None,
                          verbose=True,
@@ -101,12 +100,11 @@ def test_pipeline_rfc_example_get_message(oscore_dir):
                          no_oscore=False,
                          no_outer_compression=False,
                          no_piv2payload=False,
-                         oscore_dir='myoscore_dir',
+                         oscore_dir='oscore_dir',
                          payload=None,
                          role=None,
                          silent=False,
                          token='0x82',
-                         # uri='coap://localhost/temperature',
                          uri=None,
                          uri_path='temperature',
                          verbose=True,
@@ -181,12 +179,11 @@ def test_pipeline_post_message(oscore_dir):
                          no_oscore=False,
                          no_outer_compression=False,
                          no_piv2payload=False,
-                         oscore_dir='myoscore_dir',
+                         oscore_dir='oscore_dir',
                          payload=None,
                          role=None,
                          silent=False,
                          token='0x82',
-                         # uri='coap://localhost/temperature',
                          uri='coap://127.0.0.1/temperature',
                          uri_path=None,
                          verbose=True,
@@ -205,7 +202,7 @@ def test_pipeline_post_message(oscore_dir):
             no_oscore=False,
             no_outer_compression=False,
             no_piv2payload=False,
-            oscore_dir='myoscore_dir',
+            oscore_dir='oscore_dir',
             payload=None,
             role='server',
             silent=False,

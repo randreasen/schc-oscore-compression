@@ -1,9 +1,24 @@
-from schc.Parser import Parser
 import re
 import struct
+import io
+import os
+import logging
 
-import log
-logger = log.getLogger("logger")
+from pprint import pprint
+
+LOGLEVEL = os.getenv("LOGLEVEL") or "INFO"
+LOG_FORMAT="%(asctime)s [%(filename)s:%(lineno)d]-%(levelname)s-: %(message)s"
+
+logging.basicConfig(format=LOG_FORMAT)
+logger = logging.getLogger("logger")
+logger.setLevel(getattr(logging, LOGLEVEL.upper()))
+
+
+def pprint_s(*args) -> str:
+    stream = io.StringIO()
+    pprint(*args, stream=stream)
+    return stream.getvalue()
+
 
 def MO_ignore( TV, FV, length, arg = None ):
     """Matching Operator ignore, return true for any Target Value"""
@@ -142,10 +157,9 @@ class RuleManager:
         for rule in self.context:
             logger.debug("Finding rule from headers (dir = {})".format(direction))
             logger.debug('applying rule:')
-            for line in log.pprint_s(rule).splitlines():
+            for line in pprint_s(rule).splitlines():
                 logger.debug(line)
 
-            # logger.debug(f"looking for size {len(headers)}, {rule['upRules']}, {rule['downRules']}")
             logger.debug("looking for size {}, {}, {}".format(len(headers), rule['upRules'], rule['downRules']))
             #not the good number of rules, try the next
             if (direction == "up" and len(headers) != rule["upRules"]): continue
@@ -184,7 +198,7 @@ class RuleManager:
 
                     # does the MO has an argument
                     arg = None
-                    reg = re.search('\((.*)\)', MO)
+                    reg = re.search(r'\((.*)\)', MO)
                     if reg:
                         # group(1) returns the first parenthesized subgroup
                         arg = int(reg.group(1))
@@ -210,10 +224,8 @@ class RuleManager:
 
             logger.debug("The following entries were missing to fully match rule:")
             missing_entries = tried_entries.difference(found_entry_keys)
-            for line in log.pprint_s(missing_entries).splitlines():
+            for line in pprint_s(missing_entries).splitlines():
                 logger.debug(line)
-
-            # print("Found ", foundEntries, " among ", len(headers), ' ', rule["upRules"], ' ', rule["downRules"])
 
             if (direction == "up" and foundEntries == rule["upRules"]):
                 return rule
@@ -222,83 +234,3 @@ class RuleManager:
 
 
         raise ValueError("No rule matches headers: {}".format(headers))
-
-        # print ("No rule matches header")
-        # return (None)
-
-#
-# #                           fID                  Pos  DI  TV                  MO           CDA
-# rule_coap0 = {"ruleid"  : 0,
-#              "content" : [["IPv6.version",      1,  "bi", 6,                  "equal",  "not-sent"],
-#                           ["IPv6.trafficClass", 1,  "bi", 0x00,               "equal",  "not-sent"],
-#                           ["IPv6.flowLabel",    1,  "bi", 0x000000,           "equal",  "not-sent"],
-#                           ["IPv6.payloadLength",1,  "bi", None,               "ignore", "compute-length"],
-#                           ["IPv6.nextHeader",   1,  "bi", 17,                 "equal",  "not-sent"],
-#                           ["IPv6.hopLimit",     1,  "bi", 30,                 "ignore", "not-sent"],
-#                           ["IPv6.prefixES",     1,  "bi", 0xFE80000000000000, "equal", "not-sent"],
-#                           ["IPv6.iidES",        1,  "bi", 0x0000000000000001, "equal", "not-sent"],
-#                           ["IPv6.prefixLA",     1,  "bi", 0xFE80000000000000, "equal", "not-sent"],
-#                           ["IPv6.iidLA",        1,  "bi", 0x0000000000000002, "equal", "not-sent"],
-#                           ["UDP.PortES",        1,  "bi", 5682,               "equal", "not-sent"],
-#                           ["UDP.PortLA",        1,  "bi", 5683,               "equal", "not-sent"],
-#                           ["UDP.length",        1,  "bi", None,               "ignore", "compute-length"],
-#                           ["UDP.checksum",      1,  "bi", None,               "ignore", "compute-checksum"],
-#                           ["CoAP.version",      1,  "bi", 1,                  "equal", "not-sent"],
-#                           ["CoAP.type",         1,  "bi", 0,                  "equal", "not-sent"],
-#                           ["CoAP.tokenLength",  1,  "bi", 1,                  "equal", "not-sent"],
-#                           ["CoAP.code",         1,  "bi", 2,                  "equal", "not-sent"],
-#                           ["CoAP.messageID",    1,  "bi", 1,                  "MSB(4)", "LSB"],
-#                           ["CoAP.token",        1,  "bi", 0x01,               "MSB(4)", "LSB"],
-#                           ["CoAP.Uri-Path",     1,  "up", "foo",              "equal", "not-sent"],
-#                           ["CoAP.Uri-Path",     2,  "up", "bar",              "ignore", "value-sent"],
-#                        ]}
-#
-# rule_coap1 = {"ruleid"  : 1,
-#              "content" : [["IPv6.version",      1,  "bi", 6,                  "equal",  "not-sent"],
-#                           ["IPv6.trafficClass", 1,  "bi", 0x00,               "equal",  "not-sent"],
-#                           ["IPv6.flowLabel",    1,  "bi", 0x000000,            "equal",  "not-sent"],
-#                           ["IPv6.payloadLength",1,  "bi", None,               "ignore", "compute-length"],
-#                           ["IPv6.nextHeader",   1,  "bi", 17,                 "equal",  "not-sent"],
-#                           ["IPv6.hopLimit",     1,  "bi", 30,                 "ignore", "not-sent"],
-#                           ["IPv6.prefixES",     1,  "bi", 0xFE80000000000000, "equal", "not-sent"],
-#                           ["IPv6.iidES",        1,  "bi", 0x0000000000000001, "equal", "not-sent"],
-#                           ["IPv6.prefixLA",     1,  "bi", [0x2001066073010001,
-#                                                            0x2001123456789012,
-#                                                            0x2001123456789013,
-#                                                            0xFE80000000000000],"match-mapping", "mapping-sent"],
-#                           ["IPv6.iidLA",        1,  "bi", 0x0000000000000002, "equal", "not-sent"],
-#                           ["UDP.PortES",        1,  "bi", 5682,               "equal", "not-sent"],
-#                           ["UDP.PortLA",        1,  "bi", 5683,               "equal", "not-sent"],
-#                           ["UDP.length",        1,  "bi", None,               "ignore", "compute-length"],
-#                           ["UDP.checksum",      1,  "bi", None,               "ignore", "compute-checksum"],
-#                           ["CoAP.version",      1,  "bi", 1,                  "equal", "not-sent"],
-#                           ["CoAP.type",         1,  "up", 0,                  "equal", "not-sent"],
-#                           ["CoAP.type",         1,  "dw", 2,                  "equal", "not-sent"],
-#                           ["CoAP.tokenLength",  1,  "bi", 1,                  "equal", "not-sent"],
-#                           ["CoAP.code",         1,  "up", 2,                  "equal", "not-sent"],
-#                           ["CoAP.code",         1,  "dw", [69, 132],          "match-mapping", "mapping-sent"],
-#                           ["CoAP.messageID",    1,  "bi", 1,                  "MSB(12)", "LSB"],
-#                           ["CoAP.token",        1,  "bi", 0x80,               "MSB(4)", "LSB"],
-#                           ["CoAP.Uri-Path",     1,  "up", "foo",              "equal", "not-sent"],
-#                           ["CoAP.Uri-Path",     2,  "up", "bar",              "equal", "not-sent"],
-#                           ["CoAP.Uri-Path",     3,  "up", None,               "ignore", "value-sent"],
-#                           ["CoAP.Uri-Query",    1,  "up", "k=",               "MSB(16)", "LSB"],
-#                           ["CoAP.Option-End",   1,  "up", 0xFF,               "equal", "not-sent"]
-#                        ]}
-#
-#
-# ipv6 =  bytearray(b'`\x00\x00\x00\x00-\x11\x1e\xfe\x80\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\xfe\x80\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x162\x163\x00-\x00\x00A\x02\x00\x01\x82\xb3foo\x03bar\x06ABCD==Fk=eth0\xff\x82\x19\x0bd\x1a\x00\x01\x8e\x96')
-#
-# p = Parser()
-# f, data = p.parser(ipv6)
-#
-# RM = RuleManager()
-# RM.addRule(rule_coap0)
-# RM.addRule(rule_coap1)
-#
-# print("=====")
-# print("F", f)
-# print (len(f))
-#
-# print ("rule = ", RM.FindRuleFromHeader(f, "up"))
-# print ("rule = ", RM.FindRuleFromID(1))

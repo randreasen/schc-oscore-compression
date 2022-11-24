@@ -1,13 +1,19 @@
 #! /bin/bash
 
 function usage() {
-    echo "Usage: ./demo.sh COMMAND [*ARGS]
+    echo "Usage: ./demo.sh [OPTIONS] COMMAND [ARG...]
+
+Options:
+
+-h, --help Display this help.
 
 COMMAND may be one of:
 
-build   Build the Docker image for the demo.
-run     Run the demo.
-context View and manipulate filesystem context
+build      Build the Docker image for the demo.
+regenerate Regenerate the set of SCHC rules.
+test       Run the test suite.
+run        Run a demo command.
+context    View and manipulate filesystem context
 "
 }
 
@@ -33,12 +39,16 @@ function regenerate_rules() {
 }
 
 function show_context() {
-    find myoscore_dir -type f | while read filename; do if echo "$filename" | grep -qE '\.cbor$'; then bat -A "$filename"; else bat "$filename"; fi; done;
+    find oscore_dir -type f | while read filename; do
+	printf "${filename}:\n\n"
+	cat "$filename"
+	printf "\n--\n"
+    done;
 }
 
 function clear_context() {
-    rm -rf myoscore_dir
-    echo "Cleared filesystem context in ./myoscore_dir/"
+    rm -rf oscore_dir
+    echo "Cleared filesystem context in ./oscore_dir/"
 }
 
 function context() {
@@ -69,7 +79,7 @@ function run() {
     case "$1" in
 	get-temperature)
 	    echo "Running get-temperature demo"
-	    ./demo.sh run python ./schcoscore.py \
+	    ./demo.sh run python ./run_demo.py \
 		      --mtype CON \
 		      --code GET \
 		      --uri coap://127.0.0.1/temperature \
@@ -77,20 +87,20 @@ function run() {
 		      --token 0x82 \
 		      --verbose \
 		      --with-dump \
-		      --oscore-dir myoscore_dir
+		      --oscore-dir oscore_dir
 	    ;;
 	give-temperature)
 	    echo "Running give-temperature demo"
-	    ./demo.sh run python ./schcoscore.py \
+	    ./demo.sh run python ./run_demo.py \
 		      --mtype ACK \
-		      --code CONTENT \
-		      --mid 1 \
+		      --code CONTENT\
+		      --mid 2\
 		      --token 0x82 \
 		      --verbose \
 		      --with-dump \
 		      --role server \
-		      --uri-path temperature \
-		      --oscore-dir myoscore_dir
+		      --oscore-dir oscore_dir \
+		      --payload 32332043
 	    ;;
 	*)
 	    docker-compose run --rm \
@@ -106,7 +116,7 @@ function run_tests() {
 }
 
 
-if [[ -z "$1" ]]; then
+if [[ -z "$1" ]] || [[ "$1" == "-h" ]] || [[ "$1" == "--help" ]]; then
     usage
     exit 1
 fi

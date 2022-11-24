@@ -1,1 +1,5 @@
 *.pyc
+/oscore_dir/
+*.inner
+*.outer
+/temp-contexts/

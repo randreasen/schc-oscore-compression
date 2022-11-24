@@ -68,7 +68,6 @@ OUTER_PROTECTED = {"ruleid"  : 0,
                           ["CoAP.code",         1,  "dw", 68,                  "equal", "not-sent"],
                           ["CoAP.messageID",    1,  "bi", 0,                  "MSB(12)", "LSB"],
                           ["CoAP.token",        1,  "bi", 0x80,               "MSB(5)", "LSB"],
-                          # ["CoAP.Uri-Host",     1,  "bi", "localhost",        "equal",   "not-sent"],
                           ["CoAP.Object-Security",1, "up", "\tclient",         "equal", "not-sent"],
                           ["CoAP.Object-Security",1, "dw", "",         "equal", "not-sent"],
                           ["CoAP.Option-End",   1,  "bi", 0xFF,               "equal", "not-sent"]
@@ -99,7 +98,6 @@ OUTER_NO_OSCORE = {"ruleid"  : 1,
                           ["CoAP.messageID",    1,  "bi", 0,                  "MSB(12)", "LSB"],
                           ["CoAP.token",        1,  "bi", 0x80,               "MSB(5)", "LSB"],
                           ["CoAP.Uri-Path",     1,  "up", "temperature",      "equal", "not-sent"],
-                          # ["CoAP.Uri-Host",     1,  "bi", "localhost",        "equal",   "not-sent"],
                           ["CoAP.Option-End",   1,  "dw", 0xFF,               "equal", "not-sent"]
                        ]}
 
@@ -117,7 +115,6 @@ pp = pprint.PrettyPrinter(indent=4)
 print("Written rules were:")
 for elem in inner_rules:
 	pp.pprint(elem)
-# print(RULE_ONLY_COAP)
 
 encoded = json.dumps(outer_rules)
 filename = "myrule.outer"
@@ -130,4 +127,3 @@ pp = pprint.PrettyPrinter(indent=4)
 print("Written rules were:")
 for elem in outer_rules:
 	pp.pprint(elem)
-# print(RULE_ONLY_COAP)
